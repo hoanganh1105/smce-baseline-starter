@@ -26,6 +26,7 @@ Included out of the box:
 - **Streamlit demo** — Live test (image upload) + About tab for team presentation
 - **Baseline pipeline** — EasyOCR + regex brand rules + optional sklearn product head
 - **Batch script** — writes `outputs/submission_private.csv` (Kaggle-ready)
+- **Benchmark layer** — [`shared/benchmark.py`](shared/benchmark.py) measures latency + footprint on deploy and Live test (see [Benchmark](#benchmark-lightweight-model))
 - **Sample data** — 6 private-test JPEGs + 1,202 IDs; full images installed separately
 - **Official metric** — [`private_test/metric.py`](private_test/metric.py) (do not edit)
 
@@ -104,6 +105,7 @@ Edit [`team_config.py`](team_config.py):
 | `SUBTITLE` | One-line project description |
 | `LOGO` / `FAVICON` | Paths under [`assets/`](assets/) |
 | `STREAMLIT_APP_URL` | Set after Cloud deploy |
+| `MODEL_PROFILE` | Pipeline description + footprint for benchmark UI (see [Benchmark](#benchmark-lightweight-model)) |
 
 Optional: replace PNG files in [`assets/`](assets/).
 
@@ -155,6 +157,8 @@ python scripts/setup_private_images.py ../private_test
 ```
 
 See [`data/private_test/README.md`](data/private_test/README.md).
+
+> **Benchmark:** Deploy smoke and CLI benchmark need at least one `priv_*.jpg` under `images_sample/` (bundled) or `images/` (after setup). See [Benchmark prerequisites](#prerequisites--what-must-be-present-for-benchmark-to-run).
 
 ### 5. About tab (presentation)
 
@@ -237,11 +241,14 @@ Deploy the **Live test + About** demo to [Streamlit Community Cloud](https://sha
 | Item | File / action |
 |------|----------------|
 | Team name, links, logo | [`team_config.py`](team_config.py) |
+| `MODEL_PROFILE` filled in | [`team_config.py`](team_config.py) |
 | Solution runs locally | `streamlit run streamlit_app.py` |
+| Sample images for deploy smoke | `data/private_test/images_sample/` (6 JPGs — bundled in repo) |
 | Python dependencies | [`requirements.txt`](requirements.txt) |
 | System libs (OpenCV/EasyOCR) | [`packages.txt`](packages.txt) |
 | Python version on Cloud | [`.python-version`](.python-version) → `3.11` |
 | **Public** GitHub repo | Settings → Change visibility |
+| Do **not** replace benchmark layer | Keep [`shared/benchmark.py`](shared/benchmark.py) + [`streamlit_app.py`](streamlit_app.py) imports |
 | No committed secrets | `.streamlit/secrets.toml` is gitignored |
 
 ### 1. Push code to GitHub
@@ -280,8 +287,9 @@ Streamlit installs `requirements.txt`, apt packages from `packages.txt`, and run
 
 1. Open `https://<app-name>.streamlit.app`
 2. Confirm header: logo, title, subtitle, team links from `team_config.py`
-3. **Live test** tab → upload JPG/PNG → **Chạy OCR**
-4. **About** tab → team content
+3. **Live test** tab → expand **Model footprint** → deploy smoke latency should appear (needs `images_sample/` in repo)
+4. **Live test** → upload JPG/PNG → **Chạy OCR** → check Total / OCR / Extract ms
+5. **About** tab → team content
 
 If the build fails → **Manage app → Logs**.
 
@@ -325,11 +333,13 @@ Edit [`team_config.py`](team_config.py) → push → wait for rebuild (or **Rebo
 
 **Private images (1,202 JPEGs)**
 
-Cloud does **not** bundle `data/private_test/images/` (gitignored, ~100 MB). Use **Live test → Upload** on Cloud. Run batch submission **locally**:
+Cloud does **not** bundle `data/private_test/images/` (gitignored, ~100 MB). Use **Live test → Upload** on Cloud for ad-hoc tests. Run batch submission **locally**:
 
 ```bash
 python scripts/run_submission.py
 ```
+
+**Deploy smoke benchmark** still works on Cloud using the **6 bundled** files in `data/private_test/images_sample/` — keep that folder committed. See [Benchmark](#benchmark-lightweight-model).
 
 ### 7. Secrets (optional)
 
@@ -382,34 +392,112 @@ profile = get_model_profile()  # reads team_config.MODEL_PROFILE
 
 Teams implement **`solution.pipeline.predict_from_image()`** only. Streamlit and CLI benchmark call **`shared/benchmark.py`** — do not replace that module.
 
-## Lightweight model — how to measure
+## Benchmark (lightweight model)
 
 Teams demonstrate a **lightweight** pipeline with two signals:
 
 | Signal | Where | What to report |
 |--------|-------|----------------|
-| **Latency** | `shared/benchmark.py` → `timing_ms` / deploy smoke | ms per image (avg / p95) |
-| **Footprint** | `team_config.MODEL_PROFILE` | Pipeline description, product-head MB, CPU/GPU |
+| **Latency** | [`shared/benchmark.py`](shared/benchmark.py) → `timing_ms` / deploy smoke | ms per image (avg / p50 / p95) |
+| **Footprint** | [`team_config.py`](team_config.py) → `MODEL_PROFILE` | Pipeline description, product-head MB, CPU/GPU |
 
-**Streamlit (automatic on deploy):**
+Benchmark logic lives in the **template layer** — teams replace [`solution/`](solution/) only. Do **not** delete or overwrite [`shared/benchmark.py`](shared/benchmark.py); Streamlit and CLI always import from there.
 
-- **Live test** uses `run_predict_with_metrics()` — timing always logged
-- **Deploy smoke benchmark** runs once on first load (1 sample image, cached)
-- **Model footprint** expander reads `MODEL_PROFILE`
+### What runs automatically
 
-**CLI benchmark:**
+| When | What | Where in UI / code |
+|------|------|---------------------|
+| Streamlit **first load** (deploy / reboot) | Deploy smoke benchmark — **1** sample image, cached | Live test → **Model footprint** expander |
+| User clicks **Chạy OCR** | Per-image timing via `run_predict_with_metrics()` | Live test → Total / OCR / Extract metrics |
+| Any time | Footprint text from `MODEL_PROFILE` | Same expander + About tab |
+
+On Streamlit Cloud, smoke benchmark runs on **first app load** after deploy (spinner: *"Running deploy smoke benchmark (1 image)..."*). Result is cached with `@st.cache_resource` until reboot.
+
+### Prerequisites — what must be present for benchmark to run
+
+**1. Template files (keep as-is)**
+
+| File | Role |
+|------|------|
+| [`shared/benchmark.py`](shared/benchmark.py) | Wraps `predict_from_image`, measures `timing_ms`, runs smoke/full benchmark |
+| [`streamlit_app.py`](streamlit_app.py) | Imports `get_deploy_smoke_benchmark`, `run_predict_with_metrics`, `get_model_profile` |
+| [`scripts/benchmark_solution.py`](scripts/benchmark_solution.py) | Local CLI report (6 images by default) |
+| [`shared/data_utils.py`](shared/data_utils.py) | Resolves `data/private_test/` and image folder |
+
+**2. Team contract (you customize)**
+
+| Requirement | Details |
+|-------------|---------|
+| [`solution/pipeline.py`](solution/pipeline.py) | Must expose `predict_from_image(img, min_conf=...)` and return `ocr_text`, `brand_name`, `product_name` |
+| Optional `timing_ms` in return dict | If omitted, [`shared/benchmark.py`](shared/benchmark.py) still measures wall-clock time |
+| [`team_config.MODEL_PROFILE`](team_config.py) | Update when you swap OCR / models (pipeline string, device, notes) |
+
+**3. Image data (required for smoke + CLI; not for upload-only Live test)**
+
+Benchmark reads JPGs from private-test data via [`shared/data_utils.find_private_root()`](shared/data_utils.py):
+
+```text
+data/private_test/
+├── private_test.csv          # catalog (recommended)
+└── images_sample/            # bundled — 6 sample JPGs (enough for deploy smoke)
+    └── priv_*.jpg
+# or, after setup script:
+└── images/                   # full 1,202 JPGs (for CLI --limit N)
+    └── priv_*.jpg
+```
+
+Alternative root: set env var `SMCE_PRIVATE_TEST_DIR=/path/to/private_test`.
+
+| Scenario | Minimum data | Benchmark behavior |
+|----------|--------------|-------------------|
+| **Streamlit Cloud deploy** | Keep repo’s `data/private_test/images_sample/` (do not gitignore) | Smoke runs on first load |
+| **Local Streamlit** | Same sample folder, or run `setup_private_images.py` | Smoke + Live upload both work |
+| **CLI full report** | At least `--limit` JPGs under `images/` or `images_sample/` | `python scripts/benchmark_solution.py --limit 6` |
+
+If no JPGs are found, the app still works (**Live test → Upload**), but the expander shows *"Deploy smoke benchmark skipped: …"* and CLI exits with `private_test not found` / `No JPG files`.
+
+**4. Runtime dependencies**
+
+- Python **3.11+**, [`requirements.txt`](requirements.txt) installed
+- Streamlit Cloud: [`packages.txt`](packages.txt) → `libgl1` only (see [Deploy](#deploy-streamlit-cloud))
+- First OCR run downloads EasyOCR weights (~200 MB) — allow warmup time
+
+### CLI benchmark (local)
 
 ```bash
 python scripts/benchmark_solution.py --limit 6
+python scripts/benchmark_solution.py --limit 6 --warmup 1   # default warmup
 ```
 
-Example output: avg latency, p50/p95, plus JSON model profile. Update `MODEL_PROFILE` in `team_config.py` when you swap models.
+Prints per-image `timing_ms`, then JSON summary (avg / p50 / p95 + `model_profile`). Use this before/after model changes; copy numbers into your About tab if needed.
 
-**Tips for a lighter stack:**
+Update [`team_config.MODEL_PROFILE`](team_config.py) whenever you change the stack, for example:
+
+```python
+MODEL_PROFILE = {
+    "pipeline": "PaddleOCR + custom NER",
+    "runtime_device": "CPU",
+    "product_head_mb": 2.5,
+    "ocr_backend_note": "Paddle weights cached on first run",
+    "lightweight_notes": "Replaced EasyOCR for faster Cloud cold start.",
+}
+```
+
+### Troubleshooting benchmark
+
+| Issue | Fix |
+|-------|-----|
+| Smoke skipped on Cloud | Ensure `data/private_test/images_sample/` with `priv_*.jpg` is **committed** (not gitignored) |
+| `private_test not found` (CLI) | Run from repo root; check `data/private_test/private_test.csv` + sample/full images |
+| No timing on Live test | Do not bypass `run_predict_with_metrics` in a forked `streamlit_app.py` — keep template imports |
+| Smoke very slow first time | Expected — OCR weights download + cold start; cached until app reboot |
+| Wrong footprint in UI | Edit `MODEL_PROFILE` in `team_config.py`, not `shared/benchmark.py` |
+
+### Tips for a lighter stack
 
 - Prefer `opencv-python-headless` + smaller OCR (or API) over full PyTorch stacks when possible
 - Keep trainable weights in-repo small (sklearn, regex, quantized models)
-- Report **warmup** separately — first run loads EasyOCR weights (~200 MB download)
+- Report **warmup** separately — first run loads OCR weights (~200 MB download)
 
 ---
 
