@@ -13,10 +13,8 @@ rapidfuzz
 # =========================================================================
 # 2. PYTHON 3.13 SYSTEM PATCH & PYTORCH CPU WHEEL
 # =========================================================================
-# Khắc phục lỗi thiếu 'pkg_resources' đặc thù trên môi trường Python 3.13
 setuptools<70.0.0
 
-# Chỉ định kho chứa wheel CPU độc lập của PyTorch cho hệ thống Sandbox BTC
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch>=2.0
 torchvision>=0.15
@@ -31,9 +29,8 @@ pyclipper
 shapely
 
 # =========================================================================
-# 4. VIETOCR ECOSYSTEM & DEPENDENCIES MATRIX (CÀI ĐẶT NỀN KHÓA CHẶT)
+# 4. VIETOCR ECOSYSTEM & DEPENDENCIES MATRIX (Cài đặt nền trước)
 # =========================================================================
-# Khóa chặt các thư viện để vietocr không tự kéo các bản cũ gây conflict
 einops==0.2.0
 gdown==4.4.0
 prefetch-generator==1.0.1
@@ -42,8 +39,6 @@ albumentations==1.4.2
 lmdb>=1.0.0
 
 # =========================================================================
-# 5. ĐÓNG GÓI VIETOCR CORE TRỰC TIẾP (PHÁ GIẢI XUNG ĐỘT TAY BA BẰNG INLINE LINK)
+# 5. VIETOCR CORE
 # =========================================================================
-# Sử dụng link tải wheel trực tiếp từ PyPI, bọc kèm cờ cấu hình nội bộ hợp lệ của file text.
-# Điều này giúp server ép cài đặt vietocr mà không quét ngược lại lớp Pillow nền.
-https://files.pythonhosted.org/packages/d6/30/ca0b9b3aa899477e770643b1cc7098e727581977759ba0e7552553b6fa0c/vietocr-0.3.13-py3-none-any.whl
+vietocr==0.3.13
