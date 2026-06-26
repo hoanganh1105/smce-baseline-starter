@@ -1,9 +1,49 @@
+# =========================================================================
+# 1. CORE & STREAMLIT UI DEPENDENCIES (Barem bắt buộc của BTC Round 2)
+# =========================================================================
 streamlit>=1.32
-easyocr>=1.7
-opencv-python-headless>=4.8
 numpy>=1.24
 pandas>=2.0
-Pillow>=10.0
+Pillow>=10.4.0
 scikit-learn>=1.3
+tqdm
+joblib
+rapidfuzz
+
+# =========================================================================
+# 2. PYTHON 3.13 SYSTEM PATCH & PYTORCH CPU WHEEL
+# =========================================================================
+# Khắc phục lỗi thiếu 'pkg_resources' đặc thù trên môi trường Python 3.13
+setuptools<70.0.0
+
+# Chỉ định kho chứa wheel CPU độc lập của PyTorch cho hệ thống Sandbox BTC
+--extra-index-url https://download.pytorch.org/whl/cpu
 torch>=2.0
 torchvision>=0.15
+
+# =========================================================================
+# 3. PADDLEOCR BACKEND (Bản Headless tối ưu không lỗi hiển thị màn hình)
+# =========================================================================
+paddleocr
+paddlepaddle>=3.2.2
+opencv-contrib-python-headless==4.10.0.84
+pyclipper
+shapely
+
+# =========================================================================
+# 4. VIETOCR ECOSYSTEM & DEPENDENCIES MATRIX (Cài đặt nền trước)
+# =========================================================================
+einops==0.2.0
+gdown==4.4.0
+prefetch-generator==1.0.1
+imgaug==0.4.0
+albumentations==1.4.2
+lmdb>=1.0.0
+
+# =========================================================================
+# 5. GIẢI PHÁP ĐÓNG GÓI BẤT TỬ: ÉP CÀI VIETOCR BẰNG LINK PHÂN PHỐI CHUẨN CỦA PIP
+# =========================================================================
+# Ép pip nhận diện gói vietocr trực tiếp từ kho phân phối PyPI mà không quét 
+# dependency ngược lại lớp Pillow nền, giúp bỏ qua xung đột tay ba trên Python 3.13.
+--find-links https://pypi.org/simple/
+vietocr==0.3.13

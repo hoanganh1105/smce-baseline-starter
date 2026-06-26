@@ -9,11 +9,11 @@ REPO_ROOT = Path(__file__).resolve().parent
 
 # Team identity (required after fork)
 
-TEAM_NAME = "Team ABC"
-TEAM_MEMBERS = "[Member 1], [Member 2], [Member 3]"
-GITHUB_REPO = "https://github.com/your-team/ura-hackathon-team-abc"
-OTHER_RESOURCE = "https://example.com/other-resource"
-STREAMLIT_APP_URL = ""  # e.g. "https://ura-team-abc.streamlit.app" after deploy
+TEAM_NAME = "27"
+TEAM_MEMBERS = "Huynh Hoang Anh, Nguyen Tran Hoang Hieu, Dao Nguyen Hung, Nguyen Tien Dat"
+GITHUB_REPO = "https://github.com/hoanganh1105/smce-baseline-starter"
+OTHER_RESOURCE = ""
+STREAMLIT_APP_URL = "https://smce-baseline-starter-don2pjogwlwvgrvketvnps.streamlit.app/"  # e.g. "https://ura-team-abc.streamlit.app" after deploy
 
 
 # Streamlit page copy
