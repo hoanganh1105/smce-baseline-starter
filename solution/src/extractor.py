@@ -1,3 +1,4 @@
+import os
 import re
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -205,6 +206,9 @@ class ProductPredictor:
 
 predictor_instance = ProductPredictor()
 
+NLP_WEIGHTS_FILE_ID = "1Z8BgcBwfmdOx3XFzTWcthuiH0-Gcx1ib"
+MIN_NLP_WEIGHTS_BYTES = 10 * 1024 * 1024
+
 def setup_extractor(train_csv_path: str):
     df = pd.read_csv(train_csv_path, keep_default_na=False)
     print(f"🧠 Đang huấn luyện bộ đôi Cây quyết định (Gradient Boosting + Random Forest) trên {len(df)} dòng...")
@@ -222,39 +226,104 @@ def setup_extractor(train_csv_path: str):
         joblib.dump(model_pack, weight_dir / "nlp_extractor_weights.pkl")
         print(f"💾 Đã đóng gói thành công tệp trọng số NLP tại: weights/nlp_extractor_weights.pkl")
 
+
+def _valid_weight_file(path: Path) -> bool:
+    return path.is_file() and path.stat().st_size >= MIN_NLP_WEIGHTS_BYTES
+
+
+def _download_with_gdown(file_id: str, dest: Path) -> bool:
+    try:
+        import gdown
+
+        url = f"https://drive.google.com/uc?id={file_id}"
+        tmp_path = dest.with_suffix(dest.suffix + ".download")
+        if tmp_path.exists():
+            tmp_path.unlink()
+        print(f"⏳ Đang tải NLP weights bằng gdown về: {dest}")
+        result = gdown.download(url, str(tmp_path), quiet=False)
+        if result and _valid_weight_file(tmp_path):
+            tmp_path.replace(dest)
+            return True
+        if tmp_path.exists():
+            tmp_path.unlink()
+    except Exception as exc:
+        print(f"⚠️ gdown download failed: {type(exc).__name__}: {exc}")
+    return False
+
+
+def _download_google_drive_requests(file_id: str, dest: Path) -> bool:
+    try:
+        import requests
+
+        session = requests.Session()
+        tmp_path = dest.with_suffix(dest.suffix + ".download")
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+        url = "https://docs.google.com/uc?export=download"
+        response = session.get(url, params={"id": file_id}, stream=True, timeout=60)
+        token = None
+        for key, value in response.cookies.items():
+            if key.startswith("download_warning"):
+                token = value
+                break
+
+        if token:
+            response = session.get(
+                url,
+                params={"id": file_id, "confirm": token},
+                stream=True,
+                timeout=60,
+            )
+        response.raise_for_status()
+
+        with tmp_path.open("wb") as file:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    file.write(chunk)
+
+        if _valid_weight_file(tmp_path):
+            tmp_path.replace(dest)
+            return True
+        if tmp_path.exists():
+            tmp_path.unlink()
+    except Exception as exc:
+        print(f"⚠️ requests download failed: {type(exc).__name__}: {exc}")
+    return False
+
 def load_extractor_offline():
     """🌟 HÀM NÂNG CẤP: Tự động tải weights từ Google Drive nếu chạy trên Streamlit Cloud."""
     global predictor_instance
     
-    # Định vị chính xác thư mục chứa weights trong cấu trúc mới
-    weight_dir = Path(__file__).resolve().parent.parent.parent / "weights"
+    # Keep extractor weights beside the rest of the team solution weights.
+    weight_dir = Path(__file__).resolve().parent.parent / "weights"
     weight_path = weight_dir / "nlp_extractor_weights.pkl"
     
     # Nếu file chưa tồn tại (kịch bản khi vừa deploy lên Streamlit Cloud sạch)
-    if not weight_path.exists():
+    if not _valid_weight_file(weight_path):
         print("🌐 [Team 27] Không tìm thấy file weights cục bộ. Đang kích hoạt luồng tải tự động từ Google Drive...")
-        try:
-            import gdown
-            weight_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Trích xuất ID file từ link Drive chính thức của Hoàng Anh
-            file_id = "1Z8BgcBwfmdOx3XFzTWcthuiH0-Gcx1ib"
-            download_url = f"https://drive.google.com/uc?id={file_id}"
-            
-            print(f"⏳ Đang tải tệp nlp_extractor_weights.pkl (115MB) về: {weight_path}")
-            gdown.download(download_url, str(weight_path), quiet=False)
+        weight_dir.mkdir(parents=True, exist_ok=True)
+        file_id = os.getenv("TEAM27_NLP_WEIGHTS_FILE_ID", NLP_WEIGHTS_FILE_ID)
+        downloaded = _download_with_gdown(file_id, weight_path)
+        if not downloaded:
+            downloaded = _download_google_drive_requests(file_id, weight_path)
+        if downloaded:
             print("✨ Tải file weights thành công!")
-        except Exception as e:
-            print(f"❌ Lỗi tự động tải weights từ Drive: {e}. Hệ thống sẽ chuyển sang chế độ dự phòng (Fallback).")
+        else:
+            print("❌ Không tải được NLP weights. Hệ thống sẽ chuyển sang chế độ dự phòng (Fallback).")
 
     # Tiến hành nạp weights vào RAM nếu file đã sẵn sàng
-    if weight_path.exists():
+    if _valid_weight_file(weight_path):
         print(f"📂 Đang nạp tệp trọng số NLP offline từ package: {weight_path}")
-        model_pack = joblib.load(weight_path)
-        predictor_instance._has_clf = model_pack["has_clf"]
-        predictor_instance._prod_clf = model_pack["prod_clf"]
-        predictor_instance.is_trained = model_pack["is_trained"]
-        print("✅ Nạp weights NLP thành công! Bộ lọc đa lớp kết hợp Guard Matrix đã sẵn sàng.")
+        try:
+            model_pack = joblib.load(weight_path)
+            predictor_instance._has_clf = model_pack["has_clf"]
+            predictor_instance._prod_clf = model_pack["prod_clf"]
+            predictor_instance.is_trained = model_pack["is_trained"]
+            print("✅ Nạp weights NLP thành công! Bộ lọc đa lớp kết hợp Guard Matrix đã sẵn sàng.")
+        except Exception as exc:
+            predictor_instance.is_trained = False
+            print(f"❌ Không nạp được NLP weights: {type(exc).__name__}: {exc}")
     else:
         print("⚠️ Chế độ dự phòng: Chỉ sử dụng Regex Rules Layer để bóc tách nhãn.")
 
