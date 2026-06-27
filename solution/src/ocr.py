@@ -9,6 +9,9 @@ from typing import Any
 
 from PIL import Image
 
+if not hasattr(Image, "ANTIALIAS"):
+    Image.ANTIALIAS = Image.Resampling.LANCZOS
+
 
 def clean_ocr_text(text: object, max_chars: int = 500) -> str:
     """Apply competition-safe OCR text formatting."""
@@ -136,9 +139,13 @@ class PaddleVietOCR:
         # 🌟 SỬA TẠI ĐÂY: Tên model bắt buộc phải giữ nguyên chuỗi chuẩn để không bị lỗi Registry
         detector_model = "PP-OCRv6_tiny_det"
         detector_box_thresh = float(os.getenv("PADDLE_TEXT_DET_BOX_THRESH", "0.6"))
+        has_local_detector = all(
+            (paddle_weight_dir / name).is_file()
+            for name in ("inference.yml", "inference.json", "inference.pdiparams")
+        )
 
         # 🌟 SỬA TẠI ĐÂY: Nếu folder cục bộ tồn tại, truyền nó vào tham số model_dir để ép chạy offline
-        if paddle_weight_dir.exists():
+        if has_local_detector:
             self.detector = TextDetection(
                 model_name=detector_model, 
                 model_dir=str(paddle_weight_dir),  # Ép PaddleX đọc cấu hình offline từ đây
