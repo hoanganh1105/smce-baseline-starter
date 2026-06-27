@@ -50,6 +50,8 @@ BRAND_RULES = [
     (r"nestl[ée]|nestle", ("Nestlé", "Nestlé")),
 
     # CHỦ ĐỀ 4: CÁC THƯƠNG HIỆU KHÁC
+    (r"nutri\s*gold.*canxi\s*pro|nutrigold.*canxi\s*pro|canxi\s*pro.*nutri\s*gold|canxi\s*pro.*nutrigold", ("NutriGold", "NutriGold Canxi Pro")),
+    (r"nutri\s*gold|nutrigold", ("NutriGold", "NutriGold")),
     (r"the\s*coffee\s*house", ("The Coffee House", "The Coffee House")),
     (r"ph[úu]c\s*long", ("Phúc Long", "Phúc Long")),
     (r"th\s*true|thtrue", ("TH True Milk", "TH True Milk")),
@@ -86,6 +88,8 @@ def infer_brand_from_product(product_name: str) -> str:
         return "Vinamilk"
     elif "nutifood" in prod_lower or "nuti" in prod_lower:
         return "Nutifood"
+    elif "nutrigold" in prod_lower or "nutri gold" in prod_lower:
+        return "NutriGold"
     elif "dutch lady" in prod_lower or "cô gái hà lan" in prod_lower:
         return "Dutch Lady"
     elif "ensure" in prod_lower:
@@ -189,6 +193,7 @@ class ProductPredictor:
                     "th true milk": ["th true", "th milk"],
                     "vinamilk": ["vinamilk", "dielac"],
                     "nutifood": ["nutifood", "nuti"],
+                    "nutrigold": ["nutrigold", "nutri gold", "canxi pro"],
                     "abbott ensure": ["ensure"],
                     "abbott pediasure": ["pediasure", "pedia"],
                     "aptamil": ["aptamil"]
