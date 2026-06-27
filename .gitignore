@@ -24,3 +24,7 @@ outputs/*
 submission_private.csv
 checkpoint_private.csv
 dataset_images/
+
+# Runtime-downloaded model weights
+solution/weights/nlp_extractor_weights.pkl
+solution/weights/*.download

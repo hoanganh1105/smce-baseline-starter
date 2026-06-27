@@ -4,16 +4,13 @@
 from __future__ import annotations
 
 import io
+import time
+from typing import Any
 
 import streamlit as st
 from PIL import Image
 
 import team_config as cfg
-from shared.benchmark import (
-    get_deploy_smoke_benchmark,
-    get_model_profile,
-    run_predict_with_metrics,
-)
 
 APP_CSS = f"""
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
@@ -205,6 +202,7 @@ def _init_live_state() -> None:
         "product_name_live": "",
         "upload_file_id": None,
         "timing_ms": None,
+        "solution_error_live": "",
     }
     for key, default in defaults.items():
         if key not in st.session_state:
@@ -220,16 +218,29 @@ def _clear_live_results() -> None:
     st.session_state["brand_name_live"] = ""
     st.session_state["product_name_live"] = ""
     st.session_state["timing_ms"] = None
+    st.session_state["solution_error_live"] = ""
 
 
 @st.cache_data(show_spinner=False)
 def _cached_model_profile() -> dict:
-    return get_model_profile()
+    return dict(getattr(cfg, "MODEL_PROFILE", {}) or {})
 
 
-@st.cache_resource(show_spinner="Running deploy smoke benchmark (1 image)...")
-def _cached_deploy_smoke() -> dict:
-    return get_deploy_smoke_benchmark()
+def _run_team_solution_with_metrics(img: Image.Image) -> dict[str, Any]:
+    """Run Team 27 solution directly, bypassing the organizer benchmark wrapper."""
+    from solution.pipeline import predict_from_image
+
+    start = time.perf_counter()
+    result = predict_from_image(img, cfg.DEFAULT_MIN_CONF)
+    wall_ms = round((time.perf_counter() - start) * 1000, 1)
+
+    return {
+        "ocr_text": str(result.get("ocr_text") or " "),
+        "brand_name": str(result.get("brand_name") or " "),
+        "product_name": str(result.get("product_name") or " "),
+        "error": str(result.get("error") or ""),
+        "timing_ms": dict(result.get("timing_ms") or {"ocr": wall_ms, "extract": 0.0, "total": wall_ms}),
+    }
 
 
 def _render_about_tab() -> None:
@@ -359,8 +370,7 @@ with tab_live:
     st.subheader("Live test")
 
     profile = _cached_model_profile()
-    smoke = _cached_deploy_smoke()
-    with st.expander("Model footprint (lightweight check)", expanded=False):
+    with st.expander("Team 27 model profile", expanded=False):
         st.markdown(
             f"- **Pipeline:** {profile.get('pipeline', '—')}\n"
             f"- **Runtime:** {profile.get('runtime_device', '—')}\n"
@@ -368,16 +378,7 @@ with tab_live:
             f"- **OCR note:** {profile.get('ocr_backend_note', '—')}\n\n"
             f"{profile.get('lightweight_notes', '')}"
         )
-        if smoke.get("latency_ms"):
-            lat = smoke["latency_ms"]
-            st.markdown(
-                f"**Deploy smoke benchmark (1 image):** "
-                f"total **{lat.get('total_avg', '—')} ms** "
-                f"(ocr {lat.get('ocr_avg', '—')} · extract {lat.get('extract_avg', '—')})"
-            )
-        elif smoke.get("error"):
-            st.caption(f"Deploy smoke benchmark skipped: {smoke['error']}")
-        st.caption("Full report: `python scripts/benchmark_solution.py --limit 6`")
+        st.caption("Live test calls `solution.pipeline.predict_from_image()` directly.")
 
     uploaded = st.file_uploader(
         "Ảnh sản phẩm",
@@ -401,11 +402,12 @@ with tab_live:
         with col_result:
             if st.button("Chạy OCR", type="primary", key="run_ocr_live"):
                 with st.spinner("Đang chạy OCR..."):
-                    pred = run_predict_with_metrics(img)
+                    pred = _run_team_solution_with_metrics(img)
                     st.session_state["ocr_text_live"] = pred["ocr_text"]
                     st.session_state["brand_name_live"] = pred["brand_name"]
                     st.session_state["product_name_live"] = pred["product_name"]
                     st.session_state["timing_ms"] = pred.get("timing_ms")
+                    st.session_state["solution_error_live"] = pred.get("error") or ""
 
             timing = st.session_state.get("timing_ms")
             if timing:
@@ -413,6 +415,9 @@ with tab_live:
                 t1.metric("Total (ms)", f"{timing['total']:.1f}")
                 t2.metric("OCR (ms)", f"{timing['ocr']:.1f}")
                 t3.metric("Extract (ms)", f"{timing['extract']:.1f}")
+
+            if st.session_state.get("solution_error_live"):
+                st.error(st.session_state["solution_error_live"])
 
             st.text_area("ocr_text", height=140, key="ocr_text_live")
             st.text_input("brand_name", key="brand_name_live")

@@ -51,12 +51,15 @@ DEFAULT_MIN_CONF = 0.35
 # Model footprint (edit when you change OCR / models — benchmark layer reads this)
 
 MODEL_PROFILE: dict[str, str | float | None] = {
-    "pipeline": "EasyOCR (vi+en) + regex brands + sklearn product head",
+    "pipeline": "PaddleOCR text detection + VietOCR recognition + regex/ML extractor",
     "runtime_device": "CPU",
-    "product_head_mb": None,  # auto-estimate when None
-    "ocr_backend_note": "EasyOCR weights ~200 MB (downloaded once, not in repo)",
+    "product_head_mb": 497.0,
+    "ocr_backend_note": (
+        "PP-OCRv6 tiny detector + VietOCR vgg_seq2seq local weights; "
+        "NLP extractor weights load from solution/weights or Google Drive fallback."
+    ),
     "lightweight_notes": (
-        "Baseline is CPU-friendly; product head is a few MB. "
-        "Swap OCR for a lighter stack to improve latency on Cloud."
+        "Team 27 offline CPU stack caches OCR and NLP weights once per app process. "
+        "Benchmark timing is measured by shared/benchmark.py."
     ),
 }
